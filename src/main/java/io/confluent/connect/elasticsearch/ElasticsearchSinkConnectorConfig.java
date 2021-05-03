@@ -35,6 +35,7 @@ import org.apache.kafka.common.config.ConfigDef.Width;
 import java.util.Map;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
+import org.elasticsearch.script.ScriptType;
 
 import static org.apache.kafka.common.config.ConfigDef.Range.between;
 import static org.apache.kafka.common.config.SslConfigs.SSL_ENDPOINT_IDENTIFICATION_ALGORITHM_CONFIG;
@@ -250,6 +251,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
   private static final String WRITE_METHOD_DISPLAY = "Write Method";
   private static final String WRITE_METHOD_DEFAULT = WriteMethod.INSERT.name();
 
+  public static final ScriptType SCRIPTED_UPSERT_DEFAULT_SCRIPT_TYPE = ScriptType.INLINE;
+  public static final String SCRIPTED_UPSERT_DEFAULT_SCRIPT_LANG = "painless";
+  public static final String SCRIPTED_UPSERT_SOURCE_DISPLAY = "Scripted Upsert Source";
+  public static final String SCRIPTED_UPSERT_SOURCE_CONFIG = "scripted.upsert.source";
   // Proxy group
   public static final String PROXY_HOST_CONFIG = "proxy.host";
   private static final String PROXY_HOST_DISPLAY = "Proxy Host";
@@ -321,7 +326,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public enum WriteMethod {
     INSERT,
-    UPSERT
+    UPSERT,
+    SCRIPTED_UPSERT
   }
 
   protected static ConfigDef baseConfigDef() {
@@ -564,7 +570,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
                     .collect(Collectors.toList())
                     .toArray(new String[BehaviorOnNullValues.values().length])
             ),
-            Importance.LOW,
+              Importance.LOW,
             BEHAVIOR_ON_NULL_VALUES_DOC,
             DATA_CONVERSION_GROUP,
             ++order,
@@ -590,6 +596,16 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             WRITE_METHOD_CONFIG,
             Type.STRING,
             WRITE_METHOD_DEFAULT,
+            Importance.LOW,
+            WRITE_METHOD_DOC,
+            DATA_CONVERSION_GROUP,
+            ++order,
+            Width.SHORT,
+            WRITE_METHOD_DISPLAY
+    ).define(
+            SCRIPTED_UPSERT_SOURCE_CONFIG,
+            Type.STRING,
+            "",
             ConfigDef.CaseInsensitiveValidString.in(
                 Arrays.stream(WriteMethod.values())
                     .map(WriteMethod::name)
@@ -600,8 +616,8 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
             WRITE_METHOD_DOC,
             DATA_CONVERSION_GROUP,
             ++order,
-            Width.SHORT,
-            WRITE_METHOD_DISPLAY
+            Width.NONE,
+            ""
     );
   }
 
@@ -872,6 +888,10 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
 
   public WriteMethod writeMethod() {
     return WriteMethod.valueOf(getString(WRITE_METHOD_CONFIG).toUpperCase());
+  }
+
+  public String scriptedUpsertSource() {
+    return getString(SCRIPTED_UPSERT_SOURCE_CONFIG);
   }
 
   private static class UrlListValidator implements Validator {

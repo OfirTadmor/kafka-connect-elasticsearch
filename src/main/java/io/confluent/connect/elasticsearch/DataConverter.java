@@ -15,7 +15,19 @@
 
 package io.confluent.connect.elasticsearch;
 
-import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.apache.kafka.connect.data.ConnectSchema;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -35,17 +47,11 @@ import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.VersionType;
+import org.elasticsearch.script.Script;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConfig.BehaviorOnNullValues;
 
 public class DataConverter {
 
@@ -156,6 +162,17 @@ public class DataConverter {
 
     // index
     switch (config.writeMethod()) {
+      case SCRIPTED_UPSERT:
+        return new UpdateRequest(index, id)
+            .script(new Script(
+                    ElasticsearchSinkConnectorConfig.SCRIPTED_UPSERT_DEFAULT_SCRIPT_TYPE,
+                    ElasticsearchSinkConnectorConfig.SCRIPTED_UPSERT_SOURCE_DISPLAY,
+                    config.scriptedUpsertSource(),
+                    getRecordMap(payload)
+            ))
+            .scriptedUpsert(true)
+            .upsert(Collections.emptyMap())
+            .retryOnConflict(Math.min(config.maxInFlightRequests(), 5));
       case UPSERT:
         return new UpdateRequest(index, id)
             .doc(payload, XContentType.JSON)
@@ -168,6 +185,18 @@ public class DataConverter {
         );
       default:
         return null; // shouldn't happen
+    }
+  }
+
+  private Map<String,Object> getRecordMap(String rawJson) {
+    ObjectMapper mapper = new ObjectMapper();
+    try {
+      return mapper.readValue(rawJson, new TypeReference<Map<String, Object>>(){});
+    } catch (JsonProcessingException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+      Map<String,Object> dummy = new HashMap<String,Object>();
+      return dummy;
     }
   }
 
